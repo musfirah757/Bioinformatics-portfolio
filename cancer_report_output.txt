@@ -1,0 +1,35 @@
+=======================================
+   CANCER SAMPLES ANALYSIS REPORT
+=======================================
+
+--- Sequence counts per sample ---
+cancer_sample1.fasta: 4 sequences
+cancer_sample2.fasta: 4 sequences
+cancer_sample3.fasta: 4 sequences
+cancer_sample4.fasta: 4 sequences
+cancer_sample5.fasta: 4 sequences
+
+--- Longest sequence per sample ---
+cancer_sample1.fasta: 23 bases
+cancer_sample2.fasta: 16 bases
+cancer_sample3.fasta: 29 bases
+cancer_sample4.fasta: 21 bases
+cancer_sample5.fasta: 24 bases
+
+--- Gene frequency across samples ---
+      5 EGFR
+      4 TP53
+      4 BRCA1
+      2 MYC
+      1 VEGF
+      1 PTEN
+      1 PIK3CA
+      1 KRAS
+      1 BRCA2
+
+--- Genes in ALL samples ---
+EGFR - POTENTIAL BIOMARKER
+
+=======================================
+         END OF REPORT
+=======================================
