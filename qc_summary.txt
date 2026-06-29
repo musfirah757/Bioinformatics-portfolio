@@ -1,0 +1,18 @@
+QC SUMMARY REPORT
+=================
+Tool: FastQC v0.12.1
+Sample: real_sample.fastq
+
+RESULTS:
+- Total reads: 5
+- Read length: 73-74 bp
+- GC content: 46% (normal range: 40-60%)
+- Quality: Mixed (some reads high quality, one low quality)
+
+RECOMMENDATION:
+- Read 3 shows low quality scores (@@@) - consider trimming
+- Overall data acceptable for downstream analysis
+- Suggest Trimmomatic trimming before alignment
+
+Analyst: Musfirah
+Date: June 2026
