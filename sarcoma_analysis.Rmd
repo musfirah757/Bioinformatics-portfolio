@@ -1,0 +1,43 @@
+---
+title: "Integrated Bioinformatics Analysis of Soft Tissue Sarcoma"
+author: "Musfirah"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Introduction
+
+Soft tissue sarcomas (STS) represent a heterogeneous group of malignant 
+tumors arising from mesenchymal tissues. This analysis investigates gene 
+expression profiles from 181 sarcoma patient samples across 18 histological 
+subtypes using the GSE2553 dataset from NCBI GEO.
+
+## Methods
+
+Data was downloaded using GEOquery R package. Expression matrix was cleaned 
+by removing probes with missing values. Pathway enrichment was performed 
+using enrichR. Visualizations were generated using ggplot2 and pheatmap.
+
+## Results
+
+### Dataset Overview
+The GSE2553 dataset comprised 181 samples from 18 sarcoma subtypes.
+Malignant Fibrous Histiocytoma was the most prevalent subtype (n=38).
+
+### Key Biomarkers Identified
+- **PRAME** — cancer testis antigen, highest expression
+- **WIF1** — WNT inhibitory factor, tumor suppressor
+- **POSTN** — periostin, invasion marker
+- **MEOX2** — homeobox gene, sarcoma development
+- **ADH1B** — alcohol dehydrogenase, metabolic gene
+
+### Pathway Enrichment
+PI3K-Akt signaling was the most significantly enriched KEGG pathway 
+(p = 7.8 x 10^-22), followed by multiple cancer-specific pathways.
+
+## Conclusion
+
+This integrated bioinformatics analysis identified PRAME, WIF1, and POSTN 
+as key biomarkers in soft tissue sarcoma. PI3K-Akt signaling emerged as 
+the most significantly dysregulated pathway, providing potential therapeutic 
+targets for future investigation.
