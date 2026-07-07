@@ -1,0 +1,37 @@
+---
+title: "Network Pharmacology Analysis of Curcumin Against Rheumatoid Arthritis"
+author: "Musfirah"
+date: "07-07-2026"
+output: html_document
+---
+
+## Abstract
+This study employed network pharmacology to investigate molecular 
+mechanisms of Curcumin against Rheumatoid Arthritis (RA).
+
+## Methods
+Curcumin targets collected from HERB and SwissTargetPrediction.
+RA genes from published literature. STRING database for PPI network.
+enrichR for GO/KEGG pathway ^\enrichment.
+
+## Results
+
+### Target Collection
+- HERB targets: 307
+- SwissTargetPrediction: 97
+- Combined: 382
+- Intersection with RA genes: 2
+
+### Hub Genes
+all_genes
+CD2 IL2
+  1   1
+
+### Key Pathways
+Top KEGG pathway: **Allograft Rejection** 
+
+Top GO process: **Natural Killer Cell Activation (GO:0030101)**
+
+## Conclusion
+Curcumin targets rheumatoid Arthritis through CD2 and IL2 
+hub genes, modulating allograft rejection and natural killer cell activation. 
