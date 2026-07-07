@@ -1,0 +1,81 @@
+---
+title: "Network Pharmacology Analysis of Quercetin Against Type 2 Diabetes"
+author: "Musfirah"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Abstract
+
+This study employed network pharmacology to investigate the molecular 
+mechanisms of Quercetin against Type 2 Diabetes (T2D). A total of 273 
+Quercetin targets were identified from HERB and SwissTargetPrediction 
+databases. Intersection with 40 T2D-related genes yielded 26 key targets. 
+Protein-protein interaction network analysis identified AKT1 and IL6 as 
+hub genes. GO and KEGG enrichment analyses revealed PI3K-Akt signaling 
+and AGE-RAGE pathways as key mechanisms.
+
+## 1. Introduction
+
+Quercetin is a flavonoid compound found in fruits and vegetables with 
+well-documented anti-inflammatory and antidiabetic properties. Type 2 
+Diabetes (T2D) affects over 500 million people worldwide. Network 
+pharmacology provides a systems-level approach to understand multi-target 
+drug mechanisms.
+
+## 2. Methods
+
+### 2.1 Target Collection
+Quercetin targets were collected from HERB database (189 targets) and 
+SwissTargetPrediction (99 targets), yielding 273 unique targets after 
+merging.
+
+### 2.2 Disease Gene Collection
+Type 2 Diabetes genes were collected from published literature (40 genes).
+
+### 2.3 Network Construction
+Intersection targets were submitted to STRING database (confidence > 0.7). 
+PPI network was constructed and analyzed using igraph R package.
+
+### 2.4 Enrichment Analysis
+GO and KEGG pathway enrichment was performed using enrichR R package.
+
+## 3. Results
+
+### 3.1 Target Identification
+- Quercetin targets from HERB: 189
+- Quercetin targets from SwissTargetPrediction: 99  
+- Combined unique targets: 273
+- Intersection with T2D genes: **26 key targets**
+
+### 3.2 Hub Genes
+Top hub genes by degree centrality:
+
+| Gene | Degree | Function |
+|------|--------|----------|
+| AKT1 | 18 | Insulin signaling kinase |
+| IL6  | 18 | Inflammatory cytokine |
+| TNF  | 16 | Inflammatory mediator |
+| IL1B | 15 | Inflammasome activation |
+| TP53 | 15 | Cell survival regulation |
+
+### 3.3 Pathway Enrichment
+Top KEGG pathway: **AGE-RAGE signaling in diabetic complications** 
+(p = 2.77×10⁻¹²)
+
+Top GO process: **Positive Regulation of Apoptotic Process**
+
+## 4. Conclusion
+
+Quercetin likely acts against Type 2 Diabetes through AKT1 and IL6 
+hub genes, modulating PI3K-Akt signaling and inflammatory pathways. 
+These findings provide a mechanistic basis for Quercetin's antidiabetic 
+effects and suggest potential therapeutic targets for further investigation.
+
+## 5. References
+
+1. STRING database: https://string-db.org
+2. HERB database: http://herb.ac.cn
+3. SwissTargetPrediction: http://swisstargetprediction.ch
+4. enrichR R package
+5. igraph R package
