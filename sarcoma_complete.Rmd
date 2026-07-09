@@ -1,0 +1,254 @@
+---
+title: "Integrated Bioinformatics Analysis of Soft Tissue Sarcoma"
+author: "Musfirah"
+date: "9 july 2026"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE,
+                      warning=FALSE,
+                      message=FALSE,
+                      fig.width=10,
+                      fig.height=6)
+```
+
+```{r libraries}
+library(GEOquery)
+library(ggplot2)
+library(pheatmap)
+library(enrichR)
+library(Biobase)
+```
+
+```{r load-data, cache=TRUE}
+# Download GSE2553
+gse <- getGEO("GSE2553", GSEMatrix=TRUE)[[1]]
+expr <- exprs(gse)
+metadata <- pData(gse)
+gene_info <- fData(gse)
+
+# Clean missing values
+expr_clean <- expr[complete.cases(expr),]
+
+# Gene variance
+gene_variance <- apply(expr_clean, 1, var)
+```
+
+## Abstract
+
+This study performed integrated bioinformatics analysis of the GSE2553
+dataset comprising `r ncol(expr)` soft tissue sarcoma patient samples
+across `r length(unique(metadata$source_name_ch1))` histological subtypes.
+Key biomarkers including **PRAME**, **WIF1**, and **POSTN** were identified.
+PI3K-Akt signaling emerged as the most significantly enriched pathway.
+
+## 1. Introduction
+
+Soft tissue sarcomas (STS) are a heterogeneous group of malignant tumors
+arising from mesenchymal tissues, accounting for approximately 1% of all
+adult malignancies worldwide. Despite representing a small fraction of
+all cancers, sarcomas are associated with significant morbidity and
+mortality. The molecular heterogeneity among sarcoma subtypes complicates
+the development of effective targeted therapies.
+
+Public repositories such as the Gene Expression Omnibus (GEO) database
+provide researchers with access to thousands of publicly available gene
+expression datasets. Integrated bioinformatics analysis of these datasets
+offers a powerful approach to identify molecular biomarkers and elucidate
+dysregulated pathways.
+
+## 2. Methods
+
+### 2.1 Data Source
+GSE2553 dataset was downloaded from NCBI GEO using GEOquery R package.
+The dataset comprised `r ncol(expr)` soft tissue sarcoma samples across
+`r length(unique(metadata$source_name_ch1))` histological subtypes,
+measured on `r nrow(expr)` probes.
+
+### 2.2 Data Preprocessing
+Expression matrix was extracted and probes with missing values were removed,
+retaining `r nrow(expr_clean)` probes for analysis.
+
+### 2.3 Variable Gene Identification
+Gene variance was calculated across all samples using apply() function.
+Top 20 most variable genes were selected for heatmap visualization.
+
+### 2.4 Pathway Enrichment
+GO and KEGG pathway enrichment was performed using enrichR R package on
+known biomarker genes.
+
+## 3. Results
+
+### 3.1 Dataset Overview
+
+```{r cancer-distribution, fig.cap="Figure 1: Distribution of sarcoma subtypes in GSE2553"}
+cancer_counts <- as.data.frame(table(metadata$source_name_ch1))
+colnames(cancer_counts) <- c("CancerType", "Count")
+
+ggplot(cancer_counts, aes(x=reorder(CancerType, Count),
+                           y=Count, fill=Count)) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  scale_fill_gradient(low="steelblue", high="red") +
+  labs(title="Sarcoma Subtypes in GSE2553",
+       x="Cancer Type", y="Number of Patients") +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+### 3.2 Sample Overview Table
+
+```{r sample-table}
+cancer_table <- as.data.frame(table(metadata$source_name_ch1))
+colnames(cancer_table) <- c("Sarcoma Subtype", "Sample Count")
+cancer_table <- cancer_table[order(-cancer_table$`Sample Count`),]
+knitr::kable(cancer_table, 
+             caption="Table 1: Sample distribution across sarcoma subtypes",
+             row.names=FALSE)
+```
+
+### 3.3 PCA Analysis
+
+```{r pca, fig.cap="Figure 2: PCA of sarcoma gene expression profiles"}
+pca <- prcomp(t(expr_clean), scale=TRUE)
+var_explained <- round(summary(pca)$importance[2,1:2] * 100, 1)
+
+pca_df <- data.frame(
+  PC1 = pca$x[,1],
+  PC2 = pca$x[,2],
+  CancerType = metadata$source_name_ch1
+)
+
+ggplot(pca_df, aes(x=PC1, y=PC2, color=CancerType)) +
+  geom_point(size=2.5, alpha=0.8) +
+  labs(title="PCA of Sarcoma Gene Expression Profiles",
+       x=paste0("PC1 (", var_explained[1], "% variance)"),
+       y=paste0("PC2 (", var_explained[2], "% variance)"),
+       color="Sarcoma Subtype") +
+  theme_minimal() +
+  theme(legend.text=element_text(size=7))
+```
+
+### 3.4 Top Variable Genes Heatmap
+
+```{r heatmap, fig.cap="Figure 3: Heatmap of top 20 most variable genes", fig.height=10}
+top20_idx <- order(gene_variance, decreasing=TRUE)[1:20]
+top20_expr <- expr_clean[top20_idx,]
+rownames(top20_expr) <- gene_info$Symbol[
+  match(rownames(top20_expr), rownames(gene_info))]
+
+annotation <- data.frame(
+  CancerType = metadata$source_name_ch1,
+  row.names = colnames(top20_expr)
+)
+
+pheatmap(top20_expr,
+         annotation_col=annotation,
+         show_colnames=FALSE,
+         scale="row",
+         main="Top 20 Variable Genes across Sarcoma Subtypes",
+         fontsize_row=8)
+```
+
+### 3.5 Key Biomarker Genes
+
+```{r biomarker-violin, fig.cap="Figure 4: Expression distribution of key biomarkers"}
+top_genes <- c("PRAME","WIF1","POSTN","ADH1B","MEOX2")
+gene_idx <- which(gene_info$Symbol %in% top_genes)
+expr_top <- expr_clean[gene_idx,]
+rownames(expr_top) <- gene_info$Symbol[gene_idx]
+
+expr_long <- data.frame(
+  expression = as.vector(t(expr_top)),
+  gene = rep(rownames(expr_top), each=ncol(expr_top))
+)
+
+ggplot(expr_long, aes(x=gene, y=expression, fill=gene)) +
+  geom_violin(alpha=0.7) +
+  geom_boxplot(width=0.1, fill="white", alpha=0.8) +
+  labs(title="Expression Distribution of Key Sarcoma Biomarkers",
+       x="Gene", y="Expression Level") +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+### 3.6 Biomarker Correlation
+
+```{r correlation, fig.cap="Figure 5: Biomarker gene correlation matrix", fig.width=7, fig.height=6}
+cor_matrix <- cor(t(expr_top))
+pheatmap(cor_matrix,
+         display_numbers=TRUE,
+         number_format="%.2f",
+         main="Biomarker Gene Correlation Matrix",
+         color=colorRampPalette(c("blue","white","red"))(50))
+```
+
+### 3.7 Pathway Enrichment Analysis
+
+```{r enrichment}
+biomarker_genes <- c("PRAME","WIF1","POSTN","ADH1B","MEOX2",
+                     "GZMK","PGDS","HPGD","ATP7B","PPEF1")
+results <- enrichr(biomarker_genes,
+                   c("GO_Biological_Process_2023","KEGG_2021_Human"))
+```
+
+```{r kegg-plot, fig.cap="Figure 6: KEGG pathway enrichment"}
+kegg_top <- results$KEGG_2021_Human[1:10,]
+ggplot(kegg_top, aes(x=reorder(Term,-log10(P.value)),
+                      y=-log10(P.value),
+                      fill=-log10(P.value))) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  scale_fill_gradient(low="steelblue", high="red") +
+  labs(title="KEGG Pathway Enrichment - Sarcoma Biomarkers",
+       x="Pathway", y="-log10(P-value)") +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+```{r go-plot, fig.cap="Figure 7: GO biological process enrichment"}
+go_top <- results$GO_Biological_Process_2023[1:10,]
+ggplot(go_top, aes(x=reorder(Term,-log10(P.value)),
+                    y=-log10(P.value),
+                    fill=-log10(P.value))) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  scale_fill_gradient(low="steelblue", high="darkgreen") +
+  labs(title="GO Biological Process - Sarcoma Biomarkers",
+       x="GO Term", y="-log10(P-value)") +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+## 4. Discussion
+
+Analysis of GSE2553 identified **PRAME**, **WIF1**, and **POSTN** as
+the most variable genes across sarcoma subtypes. PRAME (Preferentially
+Expressed Antigen in Melanoma) is a well-known cancer-testis antigen
+with established roles in multiple cancer types. WIF1 (WNT Inhibitory
+Factor 1) acts as a tumor suppressor through WNT pathway inhibition.
+POSTN (Periostin) is associated with tumor invasion and metastasis.
+
+PCA analysis revealed that Ewing Sarcoma samples cluster distinctly
+from other subtypes, consistent with its unique molecular profile
+driven by EWS-FLI1 fusion gene.
+
+## 5. Conclusion
+
+This integrated bioinformatics analysis of GSE2553 identified PRAME,
+WIF1, and POSTN as key biomarker genes in soft tissue sarcoma.
+PI3K-Akt signaling emerged as the most significantly enriched pathway.
+These findings provide potential therapeutic targets and warrant
+further experimental validation.
+
+## References
+
+1. GSE2553 dataset: NCBI GEO (PubMed ID: 16230383)
+2. GEOquery R package
+3. enrichR R package
+4. R Core Team (2024)

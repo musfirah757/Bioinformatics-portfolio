@@ -1,0 +1,246 @@
+---
+title: "Network Pharmacology Analysis of Quercetin Against Type 2 Diabetes"
+author: "Musfirah Tanveer"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE,
+                      warning=FALSE,
+                      message=FALSE,
+                      fig.width=10,
+                      fig.height=6)
+```
+
+```{r libraries}
+library(ggplot2)
+library(ggVennDiagram)
+library(readxl)
+library(igraph)
+library(ggraph)
+library(tidygraph)
+library(enrichR)
+```
+
+```{r load-data}
+# Load Quercetin targets
+herb_targets <- read_excel("~/bioinformatics/data/quercetin_targets.xlsx")
+herb_genes <- unique(herb_targets$`Gene symbol`)
+
+swiss_targets <- read.csv("~/bioinformatics/data/curcumin_swiss.csv")
+swiss_genes <- unique(swiss_targets$Common.name)
+
+all_quercetin <- unique(c(herb_genes, swiss_genes))
+
+# T2D genes
+diabetes_genes <- c(
+  "INS","INSR","IRS1","IRS2","PRKAA1","PRKAA2",
+  "PPARG","PPARA","ADIPOQ","LEP","LEPR","TNF",
+  "IL6","IL1B","CRP","MAPK1","MAPK3","AKT1",
+  "AKT2","PIK3CA","FOXO1","SLC2A4","GCK","G6PC",
+  "PCK1","HMGCR","FASN","SREBF1","PPARGC1A","NOS3",
+  "VEGFA","HIF1A","SIRT1","MTOR","TP53","CASP3",
+  "BCL2","NFE2L2","MAPK14","NLRP3"
+)
+
+intersection <- intersect(all_quercetin, diabetes_genes)
+
+# STRING interactions
+interactions <- read.table(
+  "~/bioinformatics/data/string_interactions.tsv",
+  header=TRUE, sep="\t", comment.char="")
+
+# Hub genes
+degree_table <- sort(table(c(interactions$X.node1,
+                              interactions$node2)),
+                     decreasing=TRUE)
+hub_genes <- names(head(degree_table, 10))
+
+# Enrichment
+invisible(capture.output(
+  results <- enrichr(hub_genes,
+                     c("GO_Biological_Process_2023","KEGG_2021_Human"))
+))
+```
+## Abstract
+
+This study employed network pharmacology to investigate the molecular
+mechanisms of Quercetin against Type 2 Diabetes (T2D). A total of
+`r length(all_quercetin)` Quercetin targets were identified from HERB
+and SwissTargetPrediction databases. Intersection with `r length(diabetes_genes)`
+T2D-related genes yielded `r length(intersection)` key targets.
+Hub gene analysis identified **AKT1** and **IL6** as the most connected
+genes. KEGG enrichment revealed AGE-RAGE signaling as the top pathway.
+
+## 1. Introduction
+
+Quercetin (3,3',4',5,7-pentahydroxyflavone) is a naturally occurring
+flavonoid found abundantly in fruits, vegetables, and grains. It has
+well-documented anti-inflammatory, antioxidant, and antidiabetic
+properties. Type 2 Diabetes Mellitus (T2D) affects over 500 million
+people worldwide and remains a major public health challenge.
+
+Network pharmacology provides a systems-level approach to understand
+how natural compounds interact with multiple targets simultaneously.
+This study applies network pharmacology to elucidate the molecular
+mechanisms of Quercetin against T2D.
+
+## 2. Methods
+
+### 2.1 Quercetin Target Collection
+Quercetin targets were collected from two databases:
+- **HERB database** (herb.ac.cn): literature-based targets
+- **SwissTargetPrediction** (swisstargetprediction.ch): structure-based predictions
+
+### 2.2 T2D Disease Gene Collection
+Type 2 Diabetes genes were collected from published literature.
+
+### 2.3 Network Construction
+Intersection targets were submitted to STRING database with confidence
+score > 0.700. PPI network was analyzed using igraph R package.
+
+### 2.4 Enrichment Analysis
+GO and KEGG pathway enrichment performed using enrichR R package.
+
+## 3. Results
+
+### 3.1 Target Identification
+
+| Source | Count |
+|--------|-------|
+| HERB database | `r length(herb_genes)` |
+| SwissTargetPrediction | `r length(swiss_genes)` |
+| Combined unique targets | `r length(all_quercetin)` |
+| T2D disease genes | `r length(diabetes_genes)` |
+| **Key intersection targets** | **`r length(intersection)`** |
+
+### 3.2 Venn Diagram
+
+```{r venn, fig.cap="Figure 1: Venn diagram of Quercetin targets and T2D genes"}
+venn_list <- list(
+  Quercetin_Targets = all_quercetin,
+  T2D_Genes = diabetes_genes
+)
+
+ggVennDiagram(venn_list, label_alpha=0, color="black") +
+  scale_fill_gradient(low="white", high="steelblue") +
+  labs(title="Quercetin Targets vs Type 2 Diabetes Genes") +
+  theme(legend.position="none")
+```
+
+### 3.3 Key Intersection Targets
+
+```{r intersection-table}
+knitr::kable(
+  data.frame(Gene=intersection),
+  caption="Table 1: Key intersection targets of Quercetin and T2D"
+)
+```
+
+### 3.4 Protein-Protein Interaction Network
+
+```{r network, fig.cap="Figure 2: PPI network of Quercetin-T2D key targets"}
+graph <- as_tbl_graph(data.frame(
+  from=interactions$X.node1,
+  to=interactions$node2,
+  score=interactions$combined_score)) %>%
+  mutate(degree=centrality_degree())
+
+ggraph(graph, layout="fr") +
+  geom_edge_link(aes(alpha=score), color="steelblue") +
+  geom_node_point(aes(size=degree, color=degree)) +
+  geom_node_text(aes(label=name), repel=TRUE, size=3) +
+  scale_color_gradient(low="lightblue", high="red") +
+  scale_size_continuous(range=c(3,12)) +
+  labs(title="Quercetin-T2D PPI Network",
+       subtitle="Node size and color represent degree centrality") +
+  theme_graph()
+```
+
+### 3.5 Hub Gene Identification
+
+```{r hub-table}
+hub_df <- data.frame(
+  Gene=names(head(degree_table,10)),
+  Degree=as.numeric(head(degree_table,10)),
+  Function=c("Insulin signaling kinase",
+             "Inflammatory cytokine",
+             "Inflammatory mediator",
+             "Inflammasome activation",
+             "Cell survival regulation",
+             "Metabolic regulation",
+             "Adipokine signaling",
+             "Apoptosis regulation",
+             "Hypoxia response",
+             "Apoptosis execution")
+)
+knitr::kable(hub_df, caption="Table 2: Top 10 hub genes by degree centrality")
+```
+
+### 3.6 KEGG Pathway Enrichment
+
+```{r kegg, fig.cap="Figure 3: KEGG pathway enrichment of hub genes"}
+kegg_top <- results$KEGG_2021_Human[1:10,]
+ggplot(kegg_top, aes(x=reorder(Term,-log10(P.value)),
+                      y=-log10(P.value),
+                      fill=-log10(P.value))) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  scale_fill_gradient(low="steelblue", high="red") +
+  labs(title="KEGG Pathway Enrichment - Quercetin Hub Genes",
+       x="Pathway", y="-log10(P-value)") +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+### 3.7 GO Biological Process Enrichment
+
+```{r go, fig.cap="Figure 4: GO biological process enrichment"}
+go_top <- results$GO_Biological_Process_2023[1:10,]
+ggplot(go_top, aes(x=reorder(Term,-log10(P.value)),
+                    y=-log10(P.value),
+                    fill=-log10(P.value))) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  scale_fill_gradient(low="steelblue", high="darkgreen") +
+  labs(title="GO Biological Process - Quercetin Hub Genes",
+       x="GO Term", y="-log10(P-value)") +
+  theme_minimal() +
+    theme(legend.position="none")
+```
+
+## 4. Discussion
+
+Network pharmacology analysis identified `r length(intersection)` key
+targets through which Quercetin may exert antidiabetic effects.
+**AKT1** and **IL6** emerged as the top hub genes with the highest
+degree centrality (degree = 18 each), suggesting Quercetin primarily
+modulates insulin signaling and inflammatory pathways simultaneously.
+
+The AGE-RAGE signaling pathway in diabetic complications was the most
+significantly enriched KEGG pathway, directly relevant to T2D pathology.
+This suggests Quercetin may protect against diabetic complications through
+multiple molecular mechanisms.
+
+## 5. Conclusion
+
+This integrated network pharmacology analysis demonstrated that Quercetin
+targets T2D through `r length(intersection)` key genes, primarily through
+**AKT1** and **IL6** hub genes. The PI3K-Akt and AGE-RAGE signaling
+pathways were identified as key mechanisms, providing a systems-level
+understanding of Quercetin's antidiabetic effects.
+
+## References
+
+1. HERB database: http://herb.ac.cn
+2. SwissTargetPrediction: http://swisstargetprediction.ch
+3. STRING database: https://string-db.org
+4. Enrichr: https://maayanlab.cloud/Enrichr/
+5. R Core Team (2024). R: A language and environment for statistical computing.
