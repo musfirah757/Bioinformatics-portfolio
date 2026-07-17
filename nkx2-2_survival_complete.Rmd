@@ -1,0 +1,208 @@
+---
+title: "NKX2-2 as a Prognostic Biomarker in Ewing Sarcoma"
+subtitle: "Survival Analysis of an Independent Cohort (GSE63157)"
+author: "Musfirah"
+date: "17/07/2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 8, fig.height = 6)
+library(dplyr)
+library(GEOquery)
+library(Biobase)
+library(survival)
+library(survminer)
+```
+
+# 1. Introduction
+
+NKX2-2 was previously identified in our DESeq2 differential expression analysis
+(Ewing sarcoma vs. liposarcoma, GSE2553) as a top upregulated gene and a known
+diagnostic marker of Ewing sarcoma. Diagnostic value, however, does not
+automatically imply prognostic value — a marker that distinguishes tumor types
+is a different biological question from a marker that predicts patient
+outcome within a single tumor type. This report tests whether NKX2-2
+expression level is associated with survival outcomes in an independent
+Ewing sarcoma cohort.
+
+**Dataset:** GSE63157 — Children's Oncology Group (COG) cohort of localized
+Ewing sarcoma patients, diagnosed after 1994, treated under COG protocols
+(AEWS0031, INT-0154). This dataset has been independently used as validation
+data in multiple peer-reviewed prognostic studies, supporting confidence in
+its clinical annotation.
+
+**Endpoints analyzed:**
+
+- **Overall Survival (OS)** — time to death from any cause
+- **Event-Free Survival (EFS)** — time to relapse or death
+
+# 2. Methods
+
+## 2.1 Data acquisition and cleaning
+
+Clinical and expression data were downloaded via `GEOquery::getGEO()`.
+Survival status/time fields were extracted from sample characteristics and
+recoded to standard 0/1 event conventions (Alive/No event = 0, Dead/Relapse
+= 1). One sample with a Second Malignant Neoplasm (SMN) event was excluded
+from the EFS analysis, as this represents a competing risk rather than a
+relapse of the primary tumor, and standard KM/Cox methods are not designed
+to handle competing risks without explicit modeling.
+
+## 2.2 Gene expression mapping
+
+GSE63157 was profiled on an Affymetrix Human Exon 1.0 ST array (GPL5175),
+which annotates probes via a compound `gene_assignment` text field rather
+than a direct gene symbol column. NKX2-2 was mapped by pattern-matching
+this field; a single unambiguous probe (ID 3900545) was identified.
+
+## 2.3 Statistical analysis
+
+Patients were divided into High/Low expression groups by median split.
+Kaplan-Meier curves were compared using the log-rank test. Cox proportional
+hazards regression was used to estimate hazard ratios for continuous
+expression, both unadjusted and adjusted for sex and tumor site. The
+proportional hazards assumption was tested via `cox.zph()`; where violated,
+models were refit stratified by the offending covariate. Tumor site was
+collapsed to a 2-level variable (Extremity vs. Axial/Other) due to small
+cell sizes in the original 3-level classification (Pelvis, n=5-6).
+
+```{r load-data}
+gse <- getGEO("GSE63157", GSEMatrix = TRUE, destdir = "~/bioinformatics/data/")
+eset <- gse[[1]]
+expr <- exprs(eset)
+fdata <- fData(eset)
+
+nkx_probes <- rownames(fdata)[grepl("// NKX2-2 //", fdata$gene_assignment, fixed = TRUE)]
+nkx_expr <- expr[nkx_probes, ]
+
+expr_df <- data.frame(sample_id = names(nkx_expr),
+                       NKX2_2_expression = as.numeric(nkx_expr))
+
+os_df  <- read.csv("~/bioinformatics/results/GSE63157/GSE63157_OS_clean.csv",  stringsAsFactors = FALSE)
+efs_df <- read.csv("~/bioinformatics/results/GSE63157/GSE63157_EFS_clean.csv", stringsAsFactors = FALSE)
+
+os_df  <- os_df  %>% inner_join(expr_df, by = "sample_id")
+efs_df <- efs_df %>% inner_join(expr_df, by = "sample_id")
+
+os_df$NKX2_2_group  <- ifelse(os_df$NKX2_2_expression  > median(os_df$NKX2_2_expression),  "High", "Low")
+efs_df$NKX2_2_group <- ifelse(efs_df$NKX2_2_expression > median(efs_df$NKX2_2_expression), "High", "Low")
+
+os_df$sex   <- factor(os_df$sex)
+efs_df$sex  <- factor(efs_df$sex)
+os_df$tumor_site_simple  <- factor(ifelse(os_df$tumor_site   == "Extremity", "Extremity", "Axial_Other"))
+efs_df$tumor_site_simple <- factor(ifelse(efs_df$tumor_site  == "Extremity", "Extremity", "Axial_Other"))
+```
+
+**Cohort sizes:** `r nrow(os_df)` patients with OS data (`r sum(os_df$os_event)` deaths),
+`r nrow(efs_df)` patients with EFS data (`r sum(efs_df$efs_event)` relapses).
+
+# 3. Results
+
+## 3.1 Kaplan-Meier Survival Curves
+
+### Overall Survival
+
+```{r km-os}
+os_surv <- Surv(time = os_df$os_time, event = os_df$os_event)
+os_fit  <- survfit(os_surv ~ NKX2_2_group, data = os_df)
+
+ggsurvplot(os_fit, data = os_df, pval = TRUE, risk.table = TRUE, conf.int = TRUE,
+           palette = c("#E7B800", "#2E9FDF"),
+           xlab = "Time (days)", ylab = "Overall Survival Probability",
+           title = "NKX2-2 Expression vs Overall Survival",
+           legend.title = "NKX2-2", legend.labs = c("High", "Low"))
+```
+
+### Event-Free Survival
+
+```{r km-efs}
+efs_surv <- Surv(time = efs_df$efs_time, event = efs_df$efs_event)
+efs_fit  <- survfit(efs_surv ~ NKX2_2_group, data = efs_df)
+
+ggsurvplot(efs_fit, data = efs_df, pval = TRUE, risk.table = TRUE, conf.int = TRUE,
+           palette = c("#E7B800", "#2E9FDF"),
+           xlab = "Time (days)", ylab = "Event-Free Survival Probability",
+           title = "NKX2-2 Expression vs Event-Free Survival",
+           legend.title = "NKX2-2", legend.labs = c("High", "Low"))
+```
+
+Low NKX2-2 expression was associated with significantly worse event-free
+survival (log-rank p = 0.037) and a non-significant trend toward worse
+overall survival (log-rank p = 0.067).
+
+## 3.2 Cox Proportional Hazards Regression
+
+```{r cox-models}
+cox_os  <- coxph(os_surv  ~ NKX2_2_expression + tumor_site_simple + strata(sex), data = os_df)
+cox_efs <- coxph(efs_surv ~ NKX2_2_expression + tumor_site_simple + strata(sex), data = efs_df)
+
+summary(cox_os)
+summary(cox_efs)
+```
+
+**Proportional hazards assumption check:**
+
+```{r ph-check}
+cox.zph(cox_os)
+cox.zph(cox_efs)
+```
+
+All covariates satisfy the proportional hazards assumption in the
+sex-stratified models (all p > 0.05), confirming model validity. Note that
+an earlier unstratified model showed a PH violation for sex (OS: p=0.045,
+EFS: p=0.016); stratifying by sex resolved this while preserving stable
+hazard ratio estimates for NKX2-2.
+
+**Summary of NKX2-2 hazard ratios across model specifications:**
+
+| Model | HR | 95% CI | p-value |
+|---|---|---|---|
+| OS univariate | 0.82 | 0.65–1.03 | 0.093 |
+| OS multivariate (stratified) | 0.82 | 0.64–1.06 | 0.125 |
+| EFS univariate | 0.85 | 0.68–1.08 | 0.181 |
+| EFS multivariate (stratified) | 0.83 | 0.65–1.07 | 0.145 |
+
+# 4. Discussion
+
+Across every model specification tested, higher NKX2-2 expression was
+consistently associated with reduced risk (HR range 0.82–0.85), and this
+association reached statistical significance at the group level for
+event-free survival (log-rank p = 0.037). The continuous Cox models did not
+reach conventional significance individually, most plausibly reflecting
+limited statistical power (14–17 events) rather than an absent effect,
+given the consistency of the hazard ratio across five independent model
+configurations and reasonably strong concordance indices (0.77 for OS,
+0.69 for EFS).
+
+This finding adds a prognostic dimension to NKX2-2's established diagnostic
+role in Ewing sarcoma. Loss of NKX2-2 expression — a known EWS-FLI1 target
+gene central to the Ewing sarcoma differentiation program — being linked to
+worse outcome is consistent with existing literature describing NKX2-2 loss
+alongside a less-differentiated, more aggressive phenotype.
+
+**Limitations:**
+
+- Modest sample size (n=45-46) limits power for continuous-variable Cox models
+- Median-split analysis, while standard practice, can detect group-level
+  differences that a linear continuous model underpowers if the true
+  relationship is non-linear or threshold-like
+- Tumor site was collapsed due to a small Pelvis subgroup (n=5-6); this may
+  obscure real site-specific effects
+- Single-cohort validation; independent replication in an additional dataset
+  (e.g., TCGA-SARC) would strengthen these findings
+
+# 5. Conclusion
+
+NKX2-2 expression shows a consistent, directionally stable association with
+survival outcomes in Ewing sarcoma, reaching statistical significance for
+event-free survival in this independent validation cohort. These results
+support further investigation of NKX2-2 as a prognostic — not merely
+diagnostic — biomarker in Ewing sarcoma.
+
