@@ -1,0 +1,256 @@
+---
+title: "Differential Expression Analysis: Ewing Sarcoma vs Liposarcoma"
+author: "Musfirah"
+date: "17-07-2026"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE,
+                      warning=FALSE,
+                      message=FALSE,
+                      fig.width=10,
+                      fig.height=6)
+```
+
+```{r libraries}
+library(DESeq2)
+library(GEOquery)
+library(ggplot2)
+library(pheatmap)
+library(enrichR)
+library(Biobase)
+```
+
+```{r load-data, cache=TRUE}
+options(timeout=300)
+gse <- getGEO("GSE2553", GSEMatrix=TRUE,
+              destdir="~/bioinformatics/data/")[[1]]
+expr <- exprs(gse)
+metadata <- pData(gse)
+gene_info <- fData(gse)
+
+# Select groups
+ewing_idx <- which(metadata$source_name_ch1 == "Ewing Sarcoma")
+lipo_idx <- which(metadata$source_name_ch1 == "Liposarcoma")
+selected_idx <- c(ewing_idx, lipo_idx)
+expr_subset <- expr[, selected_idx]
+metadata_subset <- metadata[selected_idx,]
+condition <- factor(c(rep("Ewing", length(ewing_idx)),
+                      rep("Lipo", length(lipo_idx))))
+```
+
+```{r deseq2, cache=TRUE}
+# Prepare count matrix
+expr_counts <- round(2^expr_subset)
+expr_counts[expr_counts < 0] <- 0
+expr_counts <- matrix(as.integer(expr_counts),
+                      nrow=nrow(expr_counts),
+                      dimnames=dimnames(expr_counts))
+expr_counts_clean <- expr_counts[complete.cases(expr_counts),]
+
+# Create DESeq2 dataset
+coldata <- data.frame(condition=condition,
+                      row.names=colnames(expr_counts_clean))
+dds <- DESeqDataSetFromMatrix(countData=expr_counts_clean,
+                               colData=coldata,
+                               design=~condition)
+dds <- dds[rowSums(counts(dds)) > 10,]
+dds <- DESeq(dds)
+res <- results(dds, contrast=c("condition","Ewing","Lipo"))
+
+# Process results
+res_df <- as.data.frame(res)
+res_df$gene <- rownames(res_df)
+res_df$significance <- "Not Significant"
+res_df$significance[res_df$padj < 0.05 &
+                    res_df$log2FoldChange > 1] <- "Upregulated"
+res_df$significance[res_df$padj < 0.05 &
+                    res_df$log2FoldChange < -1] <- "Downregulated"
+
+sig_degs <- subset(res_df, padj < 0.05 & abs(log2FoldChange) > 1)
+top_up <- sig_degs[sig_degs$log2FoldChange > 0,]
+top_up <- top_up[order(top_up$log2FoldChange, decreasing=TRUE),]
+top_down <- sig_degs[sig_degs$log2FoldChange < 0,]
+top_down <- top_down[order(top_down$log2FoldChange),]
+```
+
+## Abstract
+
+This study performed differential expression analysis comparing
+**Ewing Sarcoma** (n=`r length(ewing_idx)`) and **Liposarcoma**
+(n=`r length(lipo_idx)`) samples from the GSE2553 dataset.
+A total of **`r nrow(sig_degs)` significant DEGs** were identified
+(padj < 0.05, |log2FC| > 1), including `r sum(sig_degs$log2FoldChange > 0)`
+upregulated and `r sum(sig_degs$log2FoldChange < 0)` downregulated genes.
+NKX2-2 was identified as a key Ewing Sarcoma biomarker.
+
+## 1. Introduction
+
+Soft tissue sarcomas represent a heterogeneous group of malignant tumors.
+Ewing Sarcoma is characterized by the EWS-FLI1 fusion gene and primarily
+affects children and young adults. Liposarcoma originates from adipose
+tissue and is the most common soft tissue sarcoma in adults.
+Understanding the molecular differences between these subtypes is crucial
+for developing targeted therapies.
+
+## 2. Methods
+
+### 2.1 Data Source
+GSE2553 dataset was downloaded from NCBI GEO using GEOquery.
+Ewing Sarcoma (n=`r length(ewing_idx)`) and Liposarcoma
+(n=`r length(lipo_idx)`) samples were selected for comparison.
+
+### 2.2 Differential Expression Analysis
+DESeq2 R package was used for differential expression analysis.
+Genes with adjusted p-value < 0.05 and |log2 fold change| > 1
+were considered significantly differentially expressed.
+
+### 2.3 Pathway Enrichment
+GO and KEGG pathway enrichment was performed using enrichR R package
+on top 50 upregulated genes.
+
+## 3. Results
+
+### 3.1 Overview of Differential Expression
+
+| Metric | Value |
+|--------|-------|
+| Total genes analyzed | `r nrow(res_df)` |
+| Significant DEGs | `r nrow(sig_degs)` |
+| Upregulated in Ewing | `r sum(sig_degs$log2FoldChange > 0)` |
+| Downregulated in Ewing | `r sum(sig_degs$log2FoldChange < 0)` |
+
+### 3.2 Volcano Plot
+
+```{r volcano, fig.cap="Figure 1: Volcano plot of differential expression"}
+ggplot(res_df, aes(x=log2FoldChange,
+                    y=-log10(padj),
+                    color=significance)) +
+  geom_point(alpha=0.6, size=1.5) +
+  scale_color_manual(values=c("Upregulated"="red",
+                               "Downregulated"="blue",
+                               "Not Significant"="grey")) +
+  geom_vline(xintercept=c(-1,1), linetype="dashed") +
+  geom_hline(yintercept=-log10(0.05), linetype="dashed") +
+  labs(title="Volcano Plot: Ewing Sarcoma vs Liposarcoma",
+       x="log2 Fold Change",
+       y="-log10(adjusted p-value)",
+       color="Expression") +
+  theme_minimal()
+```
+
+### 3.3 Top Differentially Expressed Genes
+
+```{r deg-table}
+# Get gene symbols
+top_up_sym <- gene_info[rownames(head(top_up,10)),"Symbol"]
+top_down_sym <- gene_info[rownames(head(top_down,10)),"Symbol"]
+
+deg_table <- data.frame(
+  Gene = c(top_up_sym, top_down_sym),
+  log2FoldChange = c(head(top_up,10)$log2FoldChange,
+                     head(top_down,10)$log2FoldChange),
+  padj = c(head(top_up,10)$padj,
+            head(top_down,10)$padj),
+  Direction = c(rep("Upregulated",10),
+                rep("Downregulated",10))
+)
+knitr::kable(deg_table,
+             caption="Table 1: Top 20 differentially expressed genes",
+             digits=4)
+```
+
+### 3.4 Heatmap of Top DEGs
+
+```{r heatmap, fig.cap="Figure 2: Heatmap of top DEGs", fig.height=10}
+top_genes_idx <- c(rownames(head(top_up,10)),
+                   rownames(head(top_down,10)))
+top_expr <- expr_subset[top_genes_idx,]
+gene_symbols <- gene_info[top_genes_idx,"Symbol"]
+gene_symbols[gene_symbols==""] <- top_genes_idx[gene_symbols==""]
+rownames(top_expr) <- gene_symbols
+
+ann <- data.frame(Condition=condition,
+                  row.names=colnames(top_expr))
+
+pheatmap(top_expr,
+         annotation_col=ann,
+         show_colnames=FALSE,
+         scale="row",
+         main="Top DEGs: Ewing Sarcoma vs Liposarcoma",
+         fontsize_row=8)
+```
+
+### 3.5 KEGG Pathway Enrichment
+
+```{r kegg, fig.cap="Figure 3: KEGG pathway enrichment"}
+up_symbols <- gene_info[rownames(top_up[1:50,]),"Symbol"]
+up_symbols <- up_symbols[up_symbols != ""]
+
+invisible(capture.output(
+  enrich_results <- enrichr(up_symbols,
+                            c("GO_Biological_Process_2023",
+                              "KEGG_2021_Human"))
+))
+
+kegg_top <- enrich_results$KEGG_2021_Human[1:10,]
+ggplot(kegg_top, aes(x=reorder(Term,-log10(P.value)),
+                      y=-log10(P.value),
+                      fill=-log10(P.value))) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  scale_fill_gradient(low="steelblue", high="red") +
+  labs(title="KEGG Pathways - Upregulated in Ewing Sarcoma",
+       x="Pathway", y="-log10(P-value)") +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+### 3.6 GO Biological Process Enrichment
+
+```{r go, fig.cap="Figure 4: GO biological process enrichment"}
+go_top <- enrich_results$GO_Biological_Process_2023[1:10,]
+ggplot(go_top, aes(x=reorder(Term,-log10(P.value)),
+                    y=-log10(P.value),
+                    fill=-log10(P.value))) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  scale_fill_gradient(low="steelblue", high="darkgreen") +
+  labs(title="GO Biological Process - Upregulated in Ewing Sarcoma",
+       x="GO Term", y="-log10(P-value)") +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+## 4. Discussion
+
+DESeq2 analysis identified `r nrow(sig_degs)` significant DEGs between
+Ewing Sarcoma and Liposarcoma. **NKX2-2**, a transcription factor
+directly regulated by the EWS-FLI1 fusion gene, was among the top
+upregulated genes in Ewing Sarcoma, consistent with published literature.
+**FABP4** was the most downregulated gene, reflecting the adipose origin
+of Liposarcoma.
+
+cAMP signaling pathway enrichment in Ewing Sarcoma upregulated genes
+is consistent with the known role of EWS-FLI1 in activating cAMP-dependent
+transcription. These findings provide molecular insights into the distinct
+biology of these two sarcoma subtypes.
+
+## 5. Conclusion
+
+This DESeq2 analysis identified `r nrow(sig_degs)` significant DEGs
+distinguishing Ewing Sarcoma from Liposarcoma. NKX2-2 and cAMP signaling
+emerged as key molecular features of Ewing Sarcoma, providing potential
+biomarkers and therapeutic targets for further investigation.
+
+## References
+
+1. GSE2553: NCBI GEO (PubMed ID: 16230383)
+2. DESeq2: Love MI et al. Genome Biology (2014)
+3. enrichR: Kuleshov MV et al. Nucleic Acids Research (2016)
+4. R Core Team (2024)
